@@ -18,6 +18,7 @@ type RateLimiter struct {
 	visitors map[string]*visitor
 	limit    int
 	window   time.Duration
+	done     chan struct{}
 }
 
 func NewRateLimiter(limit int, window time.Duration) *RateLimiter {
@@ -25,11 +26,16 @@ func NewRateLimiter(limit int, window time.Duration) *RateLimiter {
 		visitors: make(map[string]*visitor),
 		limit:    limit,
 		window:   window,
+		done:     make(chan struct{}),
 	}
 
 	go rl.cleanup()
 
 	return rl
+}
+
+func (rl *RateLimiter) Stop() {
+	close(rl.done)
 }
 
 func (rl *RateLimiter) allow(key string) bool {
@@ -45,7 +51,6 @@ func (rl *RateLimiter) allow(key string) bool {
 	}
 
 	v.count++
-	v.lastSeen = now
 
 	return v.count <= rl.limit
 }
@@ -54,14 +59,19 @@ func (rl *RateLimiter) cleanup() {
 	ticker := time.NewTicker(10 * time.Minute)
 	defer ticker.Stop()
 
-	for range ticker.C {
-		rl.mu.Lock()
-		for ip, v := range rl.visitors {
-			if time.Since(v.lastSeen) > rl.window {
-				delete(rl.visitors, ip)
+	for {
+		select {
+		case <-ticker.C:
+			rl.mu.Lock()
+			for ip, v := range rl.visitors {
+				if time.Since(v.lastSeen) > rl.window {
+					delete(rl.visitors, ip)
+				}
 			}
+			rl.mu.Unlock()
+		case <-rl.done:
+			return
 		}
-		rl.mu.Unlock()
 	}
 }
 

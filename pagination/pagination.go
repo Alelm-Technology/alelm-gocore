@@ -27,7 +27,10 @@ func FromQuery(c *gin.Context) Pagination {
 	if page < 1 {
 		page = 1
 	}
-	if limit < 1 || limit > 100 {
+	if limit < 1 {
+		limit = 20
+	}
+	if limit > 100 {
 		limit = 20
 	}
 
@@ -35,10 +38,19 @@ func FromQuery(c *gin.Context) Pagination {
 }
 
 func (p Pagination) Offset() int {
+	if p.Page < 1 {
+		p.Page = 1
+	}
+	if p.Limit < 1 {
+		p.Limit = 20
+	}
 	return (p.Page - 1) * p.Limit
 }
 
 func NewResponse(data interface{}, total int, page Pagination) PaginatedResponse {
+	if page.Limit < 1 {
+		page.Limit = 20
+	}
 	totalPages := int(math.Ceil(float64(total) / float64(page.Limit)))
 
 	return PaginatedResponse{

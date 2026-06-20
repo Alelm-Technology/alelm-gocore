@@ -2,6 +2,8 @@ package config
 
 import (
 	"fmt"
+	"log"
+	"net/url"
 	"os"
 
 	"github.com/joho/godotenv"
@@ -13,7 +15,9 @@ type Config struct {
 }
 
 func Load() *Config {
-	godotenv.Load()
+	if err := godotenv.Load(); err != nil {
+		log.Printf("warning: .env file not loaded: %v", err)
+	}
 
 	host := getEnv("DB_HOST", "localhost")
 	port := getEnv("DB_PORT", "5432")
@@ -21,7 +25,8 @@ func Load() *Config {
 	pass := getEnv("DB_PASS", "postgres")
 	name := getEnv("DB_NAME", "postgres")
 
-	dsn := fmt.Sprintf("postgres://%s:%s@%s:%s/%s?sslmode=disable", user, pass, host, port, name)
+	dsn := fmt.Sprintf("postgres://%s:%s@%s:%s/%s?sslmode=disable",
+		url.QueryEscape(user), url.PathEscape(pass), host, port, name)
 
 	return &Config{
 		Port:  getEnv("PORT", "8080"),
