@@ -33,10 +33,18 @@ func Format(err error) []FieldError {
 
 func toSnake(s string) string {
 	var result strings.Builder
-	for i, r := range s {
+	runes := []rune(s)
+	for i, r := range runes {
 		if r >= 'A' && r <= 'Z' {
-			if i > 0 && !(i > 1 && s[i-1] >= 'A' && s[i-1] <= 'Z') {
-				result.WriteRune('_')
+			if i > 0 {
+				prev := runes[i-1]
+				if prev >= 'a' && prev <= 'z' {
+					result.WriteRune('_')
+				} else if i+1 < len(runes) && runes[i+1] >= 'a' && runes[i+1] <= 'z' {
+					if i > 1 && runes[i-1] >= 'A' && runes[i-1] <= 'Z' {
+						result.WriteRune('_')
+					}
+				}
 			}
 			result.WriteRune(r + 32)
 		} else {

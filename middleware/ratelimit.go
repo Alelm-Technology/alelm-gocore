@@ -19,6 +19,7 @@ type RateLimiter struct {
 	limit    int
 	window   time.Duration
 	done     chan struct{}
+	stopOnce sync.Once
 }
 
 func NewRateLimiter(limit int, window time.Duration) *RateLimiter {
@@ -35,7 +36,9 @@ func NewRateLimiter(limit int, window time.Duration) *RateLimiter {
 }
 
 func (rl *RateLimiter) Stop() {
-	close(rl.done)
+	rl.stopOnce.Do(func() {
+		close(rl.done)
+	})
 }
 
 func (rl *RateLimiter) allow(key string) bool {
