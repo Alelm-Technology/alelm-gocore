@@ -8,24 +8,25 @@ func CORS(allowedOrigins ...string) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		origin := c.Request.Header.Get("Origin")
 
-		if len(allowedOrigins) == 0 {
-			if origin != "" {
-				c.Header("Access-Control-Allow-Origin", origin)
-			} else {
-				c.Header("Access-Control-Allow-Origin", "*")
-			}
-		} else {
-			for _, o := range allowedOrigins {
-				if o == origin {
-					c.Header("Access-Control-Allow-Origin", origin)
-					break
-				}
-			}
-			if c.Writer.Header().Get("Access-Control-Allow-Origin") == "" {
-				c.AbortWithStatus(403)
-				return
+	isAllowed := len(allowedOrigins) == 0
+	if !isAllowed {
+		for _, o := range allowedOrigins {
+			if o == "*" || o == origin {
+				isAllowed = true
+				break
 			}
 		}
+	}
+	if !isAllowed && origin != "" {
+		c.AbortWithStatus(403)
+		return
+	}
+
+	if origin != "" {
+		c.Header("Access-Control-Allow-Origin", origin)
+	} else {
+		c.Header("Access-Control-Allow-Origin", "*")
+	}
 
 		c.Header("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")
 		c.Header("Access-Control-Allow-Headers", "Content-Type, Authorization")
