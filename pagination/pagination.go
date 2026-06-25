@@ -7,6 +7,11 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
+const (
+	DefaultLimit = 20
+	MaxLimit     = 100
+)
+
 type Pagination struct {
 	Page  int `json:"page"`
 	Limit int `json:"limit"`
@@ -22,42 +27,41 @@ type PaginatedResponse struct {
 
 func FromQuery(c *gin.Context) Pagination {
 	page, _ := strconv.Atoi(c.DefaultQuery("page", "1"))
-	limit, _ := strconv.Atoi(c.DefaultQuery("limit", "20"))
+	limit, _ := strconv.Atoi(c.DefaultQuery("limit", strconv.Itoa(DefaultLimit)))
 
 	if page < 1 {
 		page = 1
 	}
-	if limit < 1 {
-		limit = 20
-	}
-	if limit > 100 {
-		limit = 20
+	if limit < 1 || limit > MaxLimit {
+		limit = DefaultLimit
 	}
 
 	return Pagination{Page: page, Limit: limit}
 }
 
 func (p Pagination) Offset() int {
-	if p.Page < 1 {
-		p.Page = 1
+	page, limit := p.Page, p.Limit
+	if page < 1 {
+		page = 1
 	}
-	if p.Limit < 1 {
-		p.Limit = 20
+	if limit < 1 {
+		limit = DefaultLimit
 	}
-	return (p.Page - 1) * p.Limit
+	return (page - 1) * limit
 }
 
 func NewResponse(data interface{}, total int, page Pagination) PaginatedResponse {
-	if page.Limit < 1 {
-		page.Limit = 20
+	limit := page.Limit
+	if limit < 1 {
+		limit = DefaultLimit
 	}
-	totalPages := int(math.Ceil(float64(total) / float64(page.Limit)))
+	totalPages := int(math.Ceil(float64(total) / float64(limit)))
 
 	return PaginatedResponse{
 		Data:       data,
 		Total:      total,
 		Page:       page.Page,
-		Limit:      page.Limit,
+		Limit:      limit,
 		TotalPages: totalPages,
 	}
 }
