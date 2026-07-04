@@ -7,6 +7,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/go-playground/validator/v10"
 	govalidator "github.com/alelmtech/gocore/validator"
+	"github.com/alelmtech/gocore/pagination"
 )
 
 type StatusErrorMapper func(err error) (statusCode int, errorCode string, message string)
@@ -148,5 +149,18 @@ func HandleEmpty[RES any](fn func(ctx *GhzContext) (RES, error)) gin.HandlerFunc
 			return
 		}
 		Success(c, result)
+	}
+}
+
+func HandlePaginated[RES any](fn func(ctx *GhzContext, page pagination.Pagination) ([]RES, int, error)) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		page := pagination.FromQuery(c)
+		gctx := &GhzContext{Context: c}
+		data, total, err := fn(gctx, page)
+		if err != nil {
+			HandleError(c, err)
+			return
+		}
+		Paginated(c, data, total, page)
 	}
 }
