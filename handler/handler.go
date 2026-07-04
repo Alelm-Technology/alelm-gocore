@@ -164,3 +164,26 @@ func HandlePaginated[RES any](fn func(ctx *GhzContext, page pagination.Paginatio
 		Paginated(c, data, total, page)
 	}
 }
+
+func HandlePaginatedQuery[REQ, RES any](fn func(ctx *GhzContext, req REQ, page pagination.Pagination) ([]RES, int, error)) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		var req REQ
+		if err := c.ShouldBindQuery(&req); err != nil {
+			var ve validator.ValidationErrors
+			if errors.As(err, &ve) {
+				ValidationError(c, govalidator.Format(ve))
+				return
+			}
+			BadRequest(c, "invalid query parameters")
+			return
+		}
+		page := pagination.FromQuery(c)
+		gctx := &GhzContext{Context: c}
+		data, total, err := fn(gctx, req, page)
+		if err != nil {
+			HandleError(c, err)
+			return
+		}
+		Paginated(c, data, total, page)
+	}
+}
