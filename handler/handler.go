@@ -36,6 +36,19 @@ func defaultErrorMapper(err error) (int, string, string) {
 	}
 }
 
+var customMapper StatusErrorMapper
+
+func SetDefaultMapper(mapper StatusErrorMapper) {
+	customMapper = mapper
+}
+
+func defaultMapper() StatusErrorMapper {
+	if customMapper != nil {
+		return customMapper
+	}
+	return defaultErrorMapper
+}
+
 func HandleError(c *gin.Context, err error) {
 	HandleErrorWithMapper(c, err, nil)
 }
@@ -45,7 +58,7 @@ func HandleErrorWithMapper(c *gin.Context, err error, mapper StatusErrorMapper) 
 		return
 	}
 	if mapper == nil {
-		mapper = defaultErrorMapper
+		mapper = defaultMapper()
 	}
 	status, code, msg := mapper(err)
 	if status >= 500 {
