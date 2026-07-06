@@ -6,6 +6,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/go-playground/validator/v10"
+	"github.com/google/uuid"
 	govalidator "github.com/alelmtech/gocore/validator"
 	"github.com/alelmtech/gocore/pagination"
 )
@@ -98,13 +99,25 @@ func handleParseError(c *gin.Context, err error) bool {
 	return false
 }
 
-func Handle[REQ, RES any](fn func(ctx *GhzContext, req REQ) (RES, error)) gin.HandlerFunc {
+func ValidateUUID(c *gin.Context, param string) (string, bool) {
+	id := c.Param(param)
+	if _, err := uuid.Parse(id); err != nil {
+		return "", false
+	}
+	return id, true
+}
+
+func Msg(text string) gin.H {
+	return gin.H{"message": text}
+}
+
+func Handle[REQ, RES any](fn func(ctx *AlelmContext, req REQ) (RES, error)) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		var req REQ
 		if !handleParseError(c, parseBody(c, &req)) {
 			return
 		}
-		gctx := &GhzContext{Context: c}
+		gctx := &AlelmContext{Context: c}
 		result, err := fn(gctx, req)
 		if err != nil {
 			HandleError(c, err)
@@ -118,7 +131,7 @@ func Handle[REQ, RES any](fn func(ctx *GhzContext, req REQ) (RES, error)) gin.Ha
 	}
 }
 
-func HandleQuery[REQ, RES any](fn func(ctx *GhzContext, req REQ) (RES, error)) gin.HandlerFunc {
+func HandleQuery[REQ, RES any](fn func(ctx *AlelmContext, req REQ) (RES, error)) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		var req REQ
 		if err := c.ShouldBindQuery(&req); err != nil {
@@ -130,7 +143,7 @@ func HandleQuery[REQ, RES any](fn func(ctx *GhzContext, req REQ) (RES, error)) g
 			BadRequest(c, "invalid query parameters")
 			return
 		}
-		gctx := &GhzContext{Context: c}
+		gctx := &AlelmContext{Context: c}
 		result, err := fn(gctx, req)
 		if err != nil {
 			HandleError(c, err)
@@ -140,9 +153,9 @@ func HandleQuery[REQ, RES any](fn func(ctx *GhzContext, req REQ) (RES, error)) g
 	}
 }
 
-func HandleEmpty[RES any](fn func(ctx *GhzContext) (RES, error)) gin.HandlerFunc {
+func HandleEmpty[RES any](fn func(ctx *AlelmContext) (RES, error)) gin.HandlerFunc {
 	return func(c *gin.Context) {
-		gctx := &GhzContext{Context: c}
+		gctx := &AlelmContext{Context: c}
 		result, err := fn(gctx)
 		if err != nil {
 			HandleError(c, err)
@@ -152,10 +165,10 @@ func HandleEmpty[RES any](fn func(ctx *GhzContext) (RES, error)) gin.HandlerFunc
 	}
 }
 
-func HandlePaginated[RES any](fn func(ctx *GhzContext, page pagination.Pagination) ([]RES, int, error)) gin.HandlerFunc {
+func HandlePaginated[RES any](fn func(ctx *AlelmContext, page pagination.Pagination) ([]RES, int, error)) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		page := pagination.FromQuery(c)
-		gctx := &GhzContext{Context: c}
+		gctx := &AlelmContext{Context: c}
 		data, total, err := fn(gctx, page)
 		if err != nil {
 			HandleError(c, err)
@@ -165,7 +178,7 @@ func HandlePaginated[RES any](fn func(ctx *GhzContext, page pagination.Paginatio
 	}
 }
 
-func HandlePaginatedQuery[REQ, RES any](fn func(ctx *GhzContext, req REQ, page pagination.Pagination) ([]RES, int, error)) gin.HandlerFunc {
+func HandlePaginatedQuery[REQ, RES any](fn func(ctx *AlelmContext, req REQ, page pagination.Pagination) ([]RES, int, error)) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		var req REQ
 		if err := c.ShouldBindQuery(&req); err != nil {
@@ -178,7 +191,7 @@ func HandlePaginatedQuery[REQ, RES any](fn func(ctx *GhzContext, req REQ, page p
 			return
 		}
 		page := pagination.FromQuery(c)
-		gctx := &GhzContext{Context: c}
+		gctx := &AlelmContext{Context: c}
 		data, total, err := fn(gctx, req, page)
 		if err != nil {
 			HandleError(c, err)

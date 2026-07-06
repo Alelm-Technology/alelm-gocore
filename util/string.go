@@ -3,6 +3,8 @@ package util
 import (
 	"math/rand"
 	"time"
+
+	"github.com/google/uuid"
 )
 
 func init() {
@@ -24,6 +26,10 @@ func Truncate(s string, maxLen int) string {
 		return s
 	}
 	return s[:maxLen] + "..."
+}
+
+func NewUUID() string {
+	return uuid.NewString()
 }
 
 func Contains(slice []string, item string) bool {

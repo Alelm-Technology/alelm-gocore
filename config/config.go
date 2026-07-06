@@ -19,22 +19,22 @@ func Load() *Config {
 		log.Printf("warning: .env file not loaded: %v", err)
 	}
 
-	host := getEnv("DB_HOST", "localhost")
-	port := getEnv("DB_PORT", "5432")
-	user := getEnv("DB_USER", "postgres")
-	pass := getEnv("DB_PASS", "postgres")
-	name := getEnv("DB_NAME", "postgres")
+	host := GetEnv("DB_HOST", "localhost")
+	port := GetEnv("DB_PORT", "5432")
+	user := GetEnv("DB_USER", "postgres")
+	pass := GetEnv("DB_PASS", "postgres")
+	name := GetEnv("DB_NAME", "postgres")
 
 	dsn := fmt.Sprintf("postgres://%s:%s@%s:%s/%s?sslmode=disable",
 		url.QueryEscape(user), url.PathEscape(pass), host, port, name)
 
 	return &Config{
-		Port:  getEnv("PORT", "8080"),
-		DBDsn: getEnv("DB_DSN", dsn),
+		Port:  GetEnv("PORT", "8080"),
+		DBDsn: GetEnv("DB_DSN", dsn),
 	}
 }
 
-func getEnv(key, fallback string) string {
+func GetEnv(key, fallback string) string {
 	if val := os.Getenv(key); val != "" {
 		return val
 	}

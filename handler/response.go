@@ -3,10 +3,19 @@ package handler
 import (
 	"math"
 	"net/http"
+	"reflect"
 
 	"github.com/gin-gonic/gin"
 	"github.com/alelmtech/gocore/pagination"
 )
+
+func nilSliceToEmpty(data interface{}) interface{} {
+	v := reflect.ValueOf(data)
+	if v.Kind() == reflect.Slice && v.IsNil() {
+		return reflect.MakeSlice(v.Type(), 0, 0).Interface()
+	}
+	return data
+}
 
 type APIResponse struct {
 	Success bool        `json:"success"`
@@ -29,11 +38,11 @@ type Meta struct {
 }
 
 func Success(c *gin.Context, data interface{}) {
-	c.JSON(http.StatusOK, APIResponse{Success: true, Data: data})
+	c.JSON(http.StatusOK, APIResponse{Success: true, Data: nilSliceToEmpty(data)})
 }
 
 func Created(c *gin.Context, data interface{}) {
-	c.JSON(http.StatusCreated, APIResponse{Success: true, Data: data})
+	c.JSON(http.StatusCreated, APIResponse{Success: true, Data: nilSliceToEmpty(data)})
 }
 
 func Message(c *gin.Context, msg string) {
@@ -48,7 +57,7 @@ func Paginated(c *gin.Context, data interface{}, total int, page pagination.Pagi
 	totalPages := int(math.Ceil(float64(total) / float64(limit)))
 	c.JSON(http.StatusOK, APIResponse{
 		Success: true,
-		Data:    data,
+		Data:    nilSliceToEmpty(data),
 		Meta: &Meta{
 			Page:       page.Page,
 			Limit:      limit,
