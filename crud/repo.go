@@ -351,6 +351,75 @@ func (r *BaseRepo[E, ID]) List(ctx context.Context, page pagination.Pagination) 
 	return entities, total, nil
 }
 
+// JoinClause is a raw SQL JOIN clause used with ListDetail.
+// Use table alias "e" for the main entity table.
+type JoinClause struct {
+	SQL string
+}
+
+// ExtraCol is an extra SELECT expression added when using ListDetail.
+type ExtraCol struct {
+	Expr  string // SQL expression, e.g. "COALESCE(v.c, 0)"
+	Alias string // column alias, e.g. "venue_count"
+}
+
+// ListDetail performs a paginated list with extra columns from JOINs.
+// The destination must be a pointer to a slice of structs that can accept
+// the base entity columns (via e.*) plus the extra columns.
+// Scope is applied automatically if configured on the BaseRepo.
+//
+// Example:
+//
+//	var data []domain.TenantWithCounts
+//	total, err := repo.ListDetail(ctx, page, []crud.JoinClause{
+//	    {SQL: "LEFT JOIN (SELECT tenant_id, COUNT(*) AS c FROM venues GROUP BY tenant_id) v ON v.tenant_id = e.id"},
+//	}, []crud.ExtraCol{
+//	    {Expr: "COALESCE(v.c, 0)", Alias: "venue_count"},
+//	}, &data)
+func (r *BaseRepo[E, ID]) ListDetail(ctx context.Context, page pagination.Pagination, joins []JoinClause, extras []ExtraCol, dest interface{}) (int, error) {
+	r.init()
+
+	joinParts := make([]string, len(joins))
+	for i, j := range joins {
+		joinParts[i] = j.SQL
+	}
+	extraParts := make([]string, len(extras))
+	for i, e := range extras {
+		extraParts[i] = fmt.Sprintf("%s AS %s", e.Expr, e.Alias)
+	}
+
+	joinsClause := strings.Join(joinParts, " ")
+	selectExtras := strings.Join(extraParts, ", ")
+
+	var whereClause string
+	var args []interface{}
+	paramIdx := 0
+	if r.scope != nil {
+		paramIdx++
+		whereClause = fmt.Sprintf(" WHERE e.%s = $%d", r.scope.Column, paramIdx)
+		args = append(args, r.ctxScope(ctx))
+	}
+
+	var total int
+	countSQL := fmt.Sprintf("SELECT COUNT(*) FROM %s e %s%s", r.table.Name, joinsClause, whereClause)
+	if err := r.get(ctx, &total, countSQL, args...); err != nil {
+		return 0, err
+	}
+
+	paramIdx++
+	limitIdx := paramIdx
+	paramIdx++
+	offsetIdx := paramIdx
+	dataSQL := fmt.Sprintf("SELECT e.*, %s FROM %s e %s%s ORDER BY %s LIMIT $%d OFFSET $%d",
+		selectExtras, r.table.Name, joinsClause, whereClause, r.table.OrderBy, limitIdx, offsetIdx)
+	dataArgs := append(args, page.Limit, page.Offset())
+
+	if err := r.select_(ctx, dest, dataSQL, dataArgs...); err != nil {
+		return 0, err
+	}
+	return total, nil
+}
+
 func (r *BaseRepo[E, ID]) DB() *sqlx.DB { return r.db }
 
 func (r *BaseRepo[E, ID]) TableInfo() TableInfo { return r.table }

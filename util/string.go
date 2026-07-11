@@ -2,14 +2,9 @@ package util
 
 import (
 	"math/rand"
-	"time"
 
 	"github.com/google/uuid"
 )
-
-func init() {
-	rand.Seed(time.Now().UnixNano())
-}
 
 const letters = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
 

@@ -2,31 +2,27 @@ package migrate
 
 import (
 	"database/sql"
-	"log/slog"
-	"os"
+	"fmt"
 
 	"github.com/golang-migrate/migrate/v4"
 	migratepg "github.com/golang-migrate/migrate/v4/database/postgres"
 	_ "github.com/golang-migrate/migrate/v4/source/file"
 )
 
-func Run(db *sql.DB, sourcePath string) {
+func Run(db *sql.DB, sourcePath string) error {
 	driver, err := migratepg.WithInstance(db, &migratepg.Config{})
 	if err != nil {
-		slog.Error("failed to create migration driver", "error", err)
-		os.Exit(1)
+		return fmt.Errorf("failed to create migration driver: %w", err)
 	}
 
 	m, err := migrate.NewWithDatabaseInstance("file://"+sourcePath, "postgres", driver)
 	if err != nil {
-		slog.Error("failed to init migration", "error", err)
-		os.Exit(1)
+		return fmt.Errorf("failed to init migration: %w", err)
 	}
 
 	if err := m.Up(); err != nil && err != migrate.ErrNoChange {
-		slog.Error("failed to run migration", "error", err)
-		os.Exit(1)
+		return fmt.Errorf("failed to run migration: %w", err)
 	}
 
-	slog.Info("migrations applied")
+	return nil
 }
