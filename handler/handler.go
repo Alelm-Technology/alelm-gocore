@@ -131,6 +131,22 @@ func Handle[REQ, RES any](fn func(ctx *AlelmContext, req REQ) (RES, error)) gin.
 	}
 }
 
+func HandlePost[REQ, RES any](fn func(ctx *AlelmContext, req REQ) (RES, error)) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		var req REQ
+		if !handleParseError(c, parseBody(c, &req)) {
+			return
+		}
+		gctx := &AlelmContext{Context: c}
+		result, err := fn(gctx, req)
+		if err != nil {
+			HandleError(c, err)
+			return
+		}
+		Success(c, result)
+	}
+}
+
 func HandleQuery[REQ, RES any](fn func(ctx *AlelmContext, req REQ) (RES, error)) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		var req REQ
