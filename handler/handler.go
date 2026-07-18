@@ -3,6 +3,7 @@ package handler
 import (
 	"errors"
 	"net/http"
+	"sync/atomic"
 
 	"github.com/gin-gonic/gin"
 	"github.com/go-playground/validator/v10"
@@ -38,15 +39,15 @@ func defaultErrorMapper(err error) (int, string, string) {
 	}
 }
 
-var customMapper StatusErrorMapper
+var customMapper atomic.Pointer[StatusErrorMapper]
 
 func SetDefaultMapper(mapper StatusErrorMapper) {
-	customMapper = mapper
+	customMapper.Store(&mapper)
 }
 
 func defaultMapper() StatusErrorMapper {
-	if customMapper != nil {
-		return customMapper
+	if m := customMapper.Load(); m != nil {
+		return *m
 	}
 	return defaultErrorMapper
 }

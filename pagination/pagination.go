@@ -44,7 +44,7 @@ func (p Pagination) Offset() int {
 	if page < 1 {
 		page = 1
 	}
-	if limit < 1 {
+	if limit < 1 || limit > MaxLimit {
 		limit = DefaultLimit
 	}
 	return (page - 1) * limit
@@ -52,7 +52,7 @@ func (p Pagination) Offset() int {
 
 func NewResponse(data interface{}, total int, page Pagination) PaginatedResponse {
 	limit := page.Limit
-	if limit < 1 {
+	if limit < 1 || limit > MaxLimit {
 		limit = DefaultLimit
 	}
 	totalPages := int(math.Ceil(float64(total) / float64(limit)))

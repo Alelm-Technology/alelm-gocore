@@ -19,6 +19,9 @@ func Register[API any](r *gin.RouterGroup, api API) {
 		if httpMethod == "" {
 			continue
 		}
+		if method.Type.NumIn() != 1 {
+			continue
+		}
 		fullPath := basePath
 		if routePath != "" {
 			fullPath += "/" + routePath

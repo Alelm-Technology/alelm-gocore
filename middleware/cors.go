@@ -1,6 +1,8 @@
 package middleware
 
 import (
+	"net/http"
+
 	"github.com/gin-gonic/gin"
 )
 
@@ -18,13 +20,13 @@ func CORS(allowedOrigins ...string) gin.HandlerFunc {
 		}
 	}
 	if !isAllowed && origin != "" {
-		c.AbortWithStatus(403)
+		c.AbortWithStatus(http.StatusForbidden)
 		return
 	}
 
 	if origin != "" {
 		c.Header("Access-Control-Allow-Origin", origin)
-	} else {
+	} else if len(allowedOrigins) == 0 {
 		c.Header("Access-Control-Allow-Origin", "*")
 	}
 

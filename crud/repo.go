@@ -172,6 +172,9 @@ func (r *BaseRepo[E, ID]) init() {
 }
 
 func (r *BaseRepo[E, ID]) fieldVal(entity *E, name string) interface{} {
+	if entity == nil {
+		return nil
+	}
 	v := reflect.ValueOf(entity).Elem()
 	for _, f := range r.fields {
 		if f.name == name {
@@ -224,6 +227,9 @@ func (r *BaseRepo[E, ID]) select_(ctx context.Context, dest interface{}, query s
 }
 
 func (r *BaseRepo[E, ID]) Create(ctx context.Context, entity *E) error {
+	if entity == nil {
+		return fmt.Errorf("entity is nil")
+	}
 	r.init()
 	r.initType()
 
@@ -268,6 +274,12 @@ func (r *BaseRepo[E, ID]) FindByIDForUpdate(ctx context.Context, id ID) (*E, err
 func (r *BaseRepo[E, ID]) Count(ctx context.Context, where string, args ...interface{}) (int, error) {
 	r.init()
 
+	if where != "" {
+		if err := validateWhereClause(where); err != nil {
+			return 0, err
+		}
+	}
+
 	query := fmt.Sprintf("SELECT COUNT(*) FROM %s", r.table.Name)
 	if r.scope != nil {
 		scopeWhere := r.scope.Column + "=$1"
@@ -288,8 +300,19 @@ func (r *BaseRepo[E, ID]) Count(ctx context.Context, where string, args ...inter
 	return total, nil
 }
 
+func validateWhereClause(where string) error {
+	if strings.ContainsAny(where, "'\";\x00") || strings.Contains(where, "--") || strings.Contains(where, "/*") {
+		return fmt.Errorf("where clause contains unsafe characters")
+	}
+	return nil
+}
+
 func (r *BaseRepo[E, ID]) UpdateField(ctx context.Context, id ID, field string, value interface{}) error {
 	r.init()
+	r.initType()
+	if !r.hasField(field) {
+		return fmt.Errorf("unknown field: %s", field)
+	}
 
 	query := fmt.Sprintf("UPDATE %s SET %s=$1, updated_at=NOW() WHERE id=$2", r.table.Name, field)
 	args := []interface{}{value, id}
@@ -302,6 +325,9 @@ func (r *BaseRepo[E, ID]) UpdateField(ctx context.Context, id ID, field string, 
 }
 
 func (r *BaseRepo[E, ID]) Update(ctx context.Context, entity *E) error {
+	if entity == nil {
+		return fmt.Errorf("entity is nil")
+	}
 	r.init()
 	r.initType()
 

@@ -1,7 +1,6 @@
 package config
 
 import (
-	"fmt"
 	"log"
 	"net/url"
 	"os"
@@ -10,7 +9,7 @@ import (
 )
 
 type Config struct {
-	Port string
+	Port  string
 	DBDsn string
 }
 
@@ -25,8 +24,14 @@ func Load() *Config {
 	pass := GetEnv("DB_PASS", "postgres")
 	name := GetEnv("DB_NAME", "postgres")
 
-	dsn := fmt.Sprintf("postgres://%s:%s@%s:%s/%s?sslmode=disable",
-		url.QueryEscape(user), url.PathEscape(pass), host, port, name)
+	u := &url.URL{
+		Scheme:   "postgres",
+		User:     url.UserPassword(user, pass),
+		Host:     host + ":" + port,
+		Path:     name,
+		RawQuery: "sslmode=disable",
+	}
+	dsn := u.String()
 
 	return &Config{
 		Port:  GetEnv("PORT", "8080"),
