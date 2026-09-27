@@ -5,6 +5,8 @@ import (
 	"database/sql"
 	"fmt"
 	"reflect"
+	"regexp"
+	"strconv"
 	"strings"
 	"sync"
 
@@ -133,12 +135,15 @@ type BaseRepo[E any, ID comparable] struct {
 	scope *ScopeConfig
 
 	q struct {
-		create   string
-		findByID string
-		update   string
-		delete   string
-		listCnt  string
-		listData string
+		create        string
+		createCols    []string
+		updCols       []string
+		findByID      string
+		update        string
+		updateNoActor string
+		delete        string
+		listCnt       string
+		listData      string
 	}
 	qOnce sync.Once
 
@@ -182,7 +187,15 @@ func (r *BaseRepo[E, ID]) init() {
 		hasActor := r.hasField("created_by")
 		hasUpdBy := r.hasField("updated_by")
 		r.hasTS, r.hasActor, r.hasUpdBy = hasTS, hasActor, hasUpdBy
-		numUpd := len(r.table.UpdColumns)
+
+		managed := map[string]bool{}
+		if hasTS {
+			managed["created_at"] = true
+			managed["updated_at"] = true
+		}
+		if hasActor {
+			managed["created_by"] = true
+		}
 
 		{
 			cols := []string{"id"}
@@ -193,10 +206,17 @@ func (r *BaseRepo[E, ID]) init() {
 				cols = append(cols, r.scope.Column)
 				params = append(params, fmt.Sprintf("$%d", ph))
 			}
+			createCols := make([]string, 0, len(r.table.Columns))
 			for _, c := range r.table.Columns {
 				if hasScope && c == r.scope.Column {
 					continue
 				}
+				if managed[c] {
+					continue
+				}
+				createCols = append(createCols, c)
+			}
+			for _, c := range createCols {
 				ph++
 				cols = append(cols, c)
 				params = append(params, fmt.Sprintf("$%d", ph))
@@ -210,6 +230,7 @@ func (r *BaseRepo[E, ID]) init() {
 				cols = append(cols, "created_by")
 				params = append(params, fmt.Sprintf("$%d", ph))
 			}
+			r.q.createCols = createCols
 			r.q.create = fmt.Sprintf("INSERT INTO %s (%s) VALUES (%s)",
 				r.table.Name, strings.Join(cols, ", "), strings.Join(params, ", "))
 		}
@@ -224,26 +245,55 @@ func (r *BaseRepo[E, ID]) init() {
 
 		{
 			paramIdx := 1
-			setParts := make([]string, 0, numUpd+2)
+			updCols := make([]string, 0, len(r.table.UpdColumns))
 			for _, c := range r.table.UpdColumns {
-				setParts = append(setParts, fmt.Sprintf("%s=$%d", c, paramIdx))
+				if hasScope && c == r.scope.Column {
+					continue
+				}
+				if hasTS && c == "updated_at" {
+					continue
+				}
+				if hasTS && c == "created_at" {
+					continue
+				}
+				if hasUpdBy && c == "updated_by" {
+					continue
+				}
+				updCols = append(updCols, c)
+			}
+			bizParts := make([]string, 0, len(updCols)+2)
+			for _, c := range updCols {
+				bizParts = append(bizParts, fmt.Sprintf("%s=$%d", c, paramIdx))
 				paramIdx++
 			}
+			last := paramIdx - 1
+			r.q.updCols = updCols
+
+			buildUpdate := func(setParts []string, idIdx int) string {
+				if hasScope {
+					return fmt.Sprintf("UPDATE %s SET %s WHERE id=$%d AND %s=$%d",
+						r.table.Name, strings.Join(setParts, ", "), idIdx, r.scope.Column, idIdx+1)
+				}
+				return fmt.Sprintf("UPDATE %s SET %s WHERE id=$%d",
+					r.table.Name, strings.Join(setParts, ", "), idIdx)
+			}
+			withTS := func(parts []string) []string {
+				if hasTS {
+					return append(parts, "updated_at=NOW()")
+				}
+				return parts
+			}
+
 			if hasUpdBy {
-				setParts = append(setParts, fmt.Sprintf("updated_by=$%d", paramIdx))
-				paramIdx++
-			}
-			if hasTS {
-				setParts = append(setParts, "updated_at=NOW()")
-			}
-			idParam := paramIdx
-			paramIdx++
-			if hasScope {
-				r.q.update = fmt.Sprintf("UPDATE %s SET %s WHERE id=$%d AND %s=$%d",
-					r.table.Name, strings.Join(setParts, ", "), idParam, r.scope.Column, paramIdx)
+				withActor := append([]string{}, bizParts...)
+				withActor = append(withActor, fmt.Sprintf("updated_by=$%d", last+1))
+				r.q.update = buildUpdate(withTS(withActor), last+2)
+
+				noActor := append([]string{}, bizParts...)
+				r.q.updateNoActor = buildUpdate(withTS(noActor), last+1)
 			} else {
-				r.q.update = fmt.Sprintf("UPDATE %s SET %s WHERE id=$%d",
-					r.table.Name, strings.Join(setParts, ", "), idParam)
+				r.q.update = buildUpdate(withTS(append([]string{}, bizParts...)), last+1)
+				r.q.updateNoActor = r.q.update
 			}
 		}
 
@@ -301,6 +351,17 @@ func (r *BaseRepo[E, ID]) colVals(entity *E, cols []string) []interface{} {
 	return vals
 }
 
+// createActorArg prefers the request-scoped actor (WithActor) for created_by
+// and falls back to the value the caller set on the entity, so entities that
+// populate created_by themselves still satisfy NOT NULL audit columns when no
+// actor is attached to the context.
+func (r *BaseRepo[E, ID]) createActorArg(ctx context.Context, entity *E) interface{} {
+	if a := Actor(ctx); a != "" {
+		return a
+	}
+	return r.fieldVal(entity, "created_by")
+}
+
 func (r *BaseRepo[E, ID]) rebind(query string) string {
 	return r.db.Rebind(query)
 }
@@ -334,9 +395,9 @@ func (r *BaseRepo[E, ID]) Create(ctx context.Context, entity *E) error {
 	if r.scope != nil {
 		args = append(args, r.entityScope(entity))
 	}
-	args = append(args, r.colVals(entity, r.table.Columns)...)
+	args = append(args, r.colVals(entity, r.q.createCols)...)
 	if r.hasActor {
-		args = append(args, actorArg(ctx))
+		args = append(args, r.createActorArg(ctx, entity))
 	}
 
 	if _, err := r.exec(ctx, r.q.create, args...); err != nil {
@@ -398,6 +459,38 @@ func (r *BaseRepo[E, ID]) FindByIDForUpdate(ctx context.Context, id ID) (*E, err
 	return &entity, nil
 }
 
+var placeholderRe = regexp.MustCompile(`\$(\d+)`)
+
+// shiftPlaceholders renumbers $N parameters in clause by delta so a caller's
+// WHERE fragment can be prefixed with additional bound arguments.
+func shiftPlaceholders(clause string, delta int) string {
+	return placeholderRe.ReplaceAllStringFunc(clause, func(m string) string {
+		n, _ := strconv.Atoi(m[1:])
+		return fmt.Sprintf("$%d", n+delta)
+	})
+}
+
+// maxPlaceholder returns the highest $N parameter referenced in clause,
+// or 0 when the clause binds no parameters.
+func maxPlaceholder(clause string) int {
+	max := 0
+	for _, m := range placeholderRe.FindAllStringSubmatch(clause, -1) {
+		n, _ := strconv.Atoi(m[1])
+		if n > max {
+			max = n
+		}
+	}
+	return max
+}
+
+// normalizedLimit clamps a caller-supplied limit to the pagination bounds.
+func normalizedLimit(limit int) int {
+	if limit < 1 || limit > pagination.MaxLimit {
+		return pagination.DefaultLimit
+	}
+	return limit
+}
+
 func (r *BaseRepo[E, ID]) Count(ctx context.Context, where string, args ...interface{}) (int, error) {
 	r.init()
 
@@ -407,21 +500,35 @@ func (r *BaseRepo[E, ID]) Count(ctx context.Context, where string, args ...inter
 		}
 	}
 
-	query := fmt.Sprintf("SELECT COUNT(*) FROM %s", r.table.Name)
+	whereArgs := args
+	if where != "" {
+		where = "(" + where + ")"
+	}
 	if r.scope != nil {
 		scopeWhere := r.scope.Column + "=$1"
 		if where != "" {
-			where = scopeWhere + " AND " + where
+			where = scopeWhere + " AND " + shiftPlaceholders(where, 1)
 		} else {
 			where = scopeWhere
 		}
-		args = append([]interface{}{r.ctxScope(ctx)}, args...)
+		whereArgs = append([]interface{}{r.ctxScope(ctx)}, args...)
 	}
+	if r.table.ExtraScope != nil {
+		if frag, eargs := r.table.ExtraScope(ctx, maxPlaceholder(where)+1); frag != "" {
+			if where == "" {
+				where = frag
+			} else {
+				where = where + " AND " + frag
+			}
+			whereArgs = append(whereArgs, eargs...)
+		}
+	}
+	query := fmt.Sprintf("SELECT COUNT(*) FROM %s", r.table.Name)
 	if where != "" {
 		query += " WHERE " + where
 	}
 	var total int
-	if err := r.get(ctx, &total, query, args...); err != nil {
+	if err := r.get(ctx, &total, query, whereArgs...); err != nil {
 		return 0, err
 	}
 	return total, nil
@@ -455,8 +562,20 @@ func (r *BaseRepo[E, ID]) UpdateField(ctx context.Context, id ID, field string, 
 		}
 		args = append(args, r.ctxScope(ctx))
 	}
-	_, err := r.exec(ctx, query, args...)
-	return err
+	if r.table.ExtraScope != nil {
+		if frag, eargs := r.table.ExtraScope(ctx, len(args)+1); frag != "" {
+			query += " AND " + frag
+			args = append(args, eargs...)
+		}
+	}
+	res, err := r.exec(ctx, query, args...)
+	if err != nil {
+		return err
+	}
+	if n, err := res.RowsAffected(); err == nil && n == 0 {
+		return sql.ErrNoRows
+	}
+	return nil
 }
 
 // overlayExisting fills zero-valued UpdColumns of entity with the persisted
@@ -532,15 +651,19 @@ func (r *BaseRepo[E, ID]) Update(ctx context.Context, entity *E) error {
 		}
 	}
 
-	args := r.colVals(entity, r.table.UpdColumns)
+	args := r.colVals(entity, r.q.updCols)
+	q := r.q.update
 	if r.hasUpdBy {
-		args = append(args, actorArg(ctx))
+		if a := Actor(ctx); a != "" {
+			args = append(args, a)
+		} else {
+			q = r.q.updateNoActor
+		}
 	}
 	args = append(args, r.entityID(entity))
 	if r.scope != nil {
 		args = append(args, r.ctxScope(ctx))
 	}
-	q := r.q.update
 	if r.table.ExtraScope != nil {
 		if frag, eargs := r.table.ExtraScope(ctx, len(args)+1); frag != "" {
 			q += " AND " + frag
@@ -577,10 +700,8 @@ func (r *BaseRepo[E, ID]) Delete(ctx context.Context, id ID) error {
 	if err != nil {
 		return err
 	}
-	if r.table.ExtraScope != nil {
-		if n, err := res.RowsAffected(); err == nil && n == 0 {
-			return sql.ErrNoRows
-		}
+	if n, err := res.RowsAffected(); err == nil && n == 0 {
+		return sql.ErrNoRows
 	}
 	return nil
 }
@@ -679,7 +800,8 @@ func (r *BaseRepo[E, ID]) List(ctx context.Context, p pagination.Pagination) ([]
 		}
 	}
 
-	dataArgs := append(append([]interface{}{}, args...), p.Limit, p.Offset())
+	limit := normalizedLimit(p.Limit)
+	dataArgs := append(append([]interface{}{}, args...), limit, p.Offset())
 	dataQ := fmt.Sprintf("SELECT * FROM %s%s ORDER BY %s LIMIT $%d OFFSET $%d",
 		r.table.Name, where, order, len(args)+1, len(args)+2)
 	var entities []E
@@ -764,9 +886,13 @@ func (r *BaseRepo[E, ID]) ListDetail(ctx context.Context, page pagination.Pagina
 	limitIdx := paramIdx
 	paramIdx++
 	offsetIdx := paramIdx
-	dataSQL := fmt.Sprintf("SELECT e.*, %s FROM %s e %s%s ORDER BY %s LIMIT $%d OFFSET $%d",
-		selectExtras, r.table.Name, joinsClause, whereClause, r.table.OrderBy, limitIdx, offsetIdx)
-	dataArgs := append(args, page.Limit, page.Offset())
+	selectCols := "e.*"
+	if selectExtras != "" {
+		selectCols = "e.*, " + selectExtras
+	}
+	dataSQL := fmt.Sprintf("SELECT %s FROM %s e %s%s ORDER BY %s LIMIT $%d OFFSET $%d",
+		selectCols, r.table.Name, joinsClause, whereClause, r.table.OrderBy, limitIdx, offsetIdx)
+	dataArgs := append(args, normalizedLimit(page.Limit), page.Offset())
 
 	if err := r.select_(ctx, dest, dataSQL, dataArgs...); err != nil {
 		return 0, err
