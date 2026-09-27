@@ -14,8 +14,8 @@ type Hooks[E any, ID comparable] struct {
 }
 
 type BaseUseCase[E any, ID comparable] struct {
-	Repo       Repository[E, ID]
-	Hooks      Hooks[E, ID]
+	Repo  Repository[E, ID]
+	Hooks Hooks[E, ID]
 }
 
 func (uc *BaseUseCase[E, ID]) Create(ctx context.Context, entity *E) error {

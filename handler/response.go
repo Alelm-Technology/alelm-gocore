@@ -5,8 +5,8 @@ import (
 	"net/http"
 	"reflect"
 
-	"github.com/gin-gonic/gin"
 	"github.com/alelmtech/gocore/pagination"
+	"github.com/gin-gonic/gin"
 )
 
 func nilSliceToEmpty(data interface{}) interface{} {
@@ -33,8 +33,8 @@ type APIError struct {
 type Meta struct {
 	Page       int `json:"page,omitempty"`
 	Limit      int `json:"limit,omitempty"`
-	Total      int `json:"total,omitempty"`
-	TotalPages int `json:"total_pages,omitempty"`
+	Total      int `json:"total"`
+	TotalPages int `json:"total_pages"`
 }
 
 func Success(c *gin.Context, data interface{}) {
@@ -70,7 +70,7 @@ func Paginated(c *gin.Context, data interface{}, total int, page pagination.Pagi
 func Error(c *gin.Context, status int, code, message string) {
 	c.JSON(status, APIResponse{
 		Success: false,
-		Error: &APIError{Code: code, Message: message},
+		Error:   &APIError{Code: code, Message: message},
 	})
 }
 
@@ -85,9 +85,11 @@ func ValidationError(c *gin.Context, fieldErrors interface{}) {
 	})
 }
 
-func NotFound(c *gin.Context, msg string)      { Error(c, http.StatusNotFound, "NOT_FOUND", msg) }
-func BadRequest(c *gin.Context, msg string)    { Error(c, http.StatusBadRequest, "INVALID_INPUT", msg) }
-func Unauthorized(c *gin.Context, msg string)  { Error(c, http.StatusUnauthorized, "UNAUTHORIZED", msg) }
-func Forbidden(c *gin.Context, msg string)     { Error(c, http.StatusForbidden, "FORBIDDEN", msg) }
+func NotFound(c *gin.Context, msg string)       { Error(c, http.StatusNotFound, "NOT_FOUND", msg) }
+func BadRequest(c *gin.Context, msg string)     { Error(c, http.StatusBadRequest, "INVALID_INPUT", msg) }
+func Unauthorized(c *gin.Context, msg string)   { Error(c, http.StatusUnauthorized, "UNAUTHORIZED", msg) }
+func Forbidden(c *gin.Context, msg string)      { Error(c, http.StatusForbidden, "FORBIDDEN", msg) }
 func Conflict(c *gin.Context, code, msg string) { Error(c, http.StatusConflict, code, msg) }
-func InternalError(c *gin.Context, msg string) { Error(c, http.StatusInternalServerError, "INTERNAL_ERROR", msg) }
+func InternalError(c *gin.Context, msg string) {
+	Error(c, http.StatusInternalServerError, "INTERNAL_ERROR", msg)
+}

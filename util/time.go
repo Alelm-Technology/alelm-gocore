@@ -3,11 +3,11 @@ package util
 import "time"
 
 const (
-	DateOnly     = "2006-01-02"
-	DateTime     = "2006-01-02 15:04:05"
-	DateTimeISO  = time.RFC3339
-	DateID       = "02-01-2006"
-	DateTimeID   = "02-01-2006 15:04"
+	DateOnly    = "2006-01-02"
+	DateTime    = "2006-01-02 15:04:05"
+	DateTimeISO = time.RFC3339
+	DateID      = "02-01-2006"
+	DateTimeID  = "02-01-2006 15:04"
 )
 
 func FormatDate(t time.Time) string {

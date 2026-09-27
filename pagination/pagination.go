@@ -13,8 +13,12 @@ const (
 )
 
 type Pagination struct {
-	Page  int `json:"page"`
-	Limit int `json:"limit"`
+	Page    int               `json:"page"`
+	Limit   int               `json:"limit"`
+	Sort    string            `json:"sort,omitempty"`
+	Dir     string            `json:"dir,omitempty"`
+	Search  string            `json:"search,omitempty"`
+	Filters map[string]string `json:"filters,omitempty"`
 }
 
 type PaginatedResponse struct {

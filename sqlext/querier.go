@@ -30,3 +30,13 @@ func GetQuerier(ctx context.Context, db *sqlx.DB) Querier {
 	}
 	return db
 }
+
+// TxFromContext returns the transaction bound to ctx, or nil when the context
+// is not running inside a transaction. Helpers that would otherwise open their
+// own transaction can use this to join an outer transaction instead.
+func TxFromContext(ctx context.Context) *sqlx.Tx {
+	if tx, ok := ctx.Value(txKey{}).(*sqlx.Tx); ok && tx != nil {
+		return tx
+	}
+	return nil
+}

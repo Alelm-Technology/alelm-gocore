@@ -5,11 +5,11 @@ import (
 	"net/http"
 	"sync/atomic"
 
+	"github.com/alelmtech/gocore/pagination"
+	govalidator "github.com/alelmtech/gocore/validator"
 	"github.com/gin-gonic/gin"
 	"github.com/go-playground/validator/v10"
 	"github.com/google/uuid"
-	govalidator "github.com/alelmtech/gocore/validator"
-	"github.com/alelmtech/gocore/pagination"
 )
 
 type StatusErrorMapper func(err error) (statusCode int, errorCode string, message string)
